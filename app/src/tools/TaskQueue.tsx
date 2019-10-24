@@ -2,11 +2,12 @@
  * @Author: Antoine YANG 
  * @Date: 2019-10-02 15:53:12 
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-10-22 11:19:36
+ * @Last Modified time: 2019-10-24 18:17:55
  */
 
 import React from 'react';
 import $ from 'jquery';
+import Color from '../preference/Color';
 import Dragable from '../prototypes/Dragable';
 
 
@@ -45,10 +46,8 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
             <div id="TaskQueue" ref="drag:target"
             style={{
                 width: '600px',
-                minHeight: '60px',
-                paddingBottom: '20px',
-                background: 'linear-gradient(to bottom, rgb(150, 152, 157), #ffffff 18%, rgb(192, 193, 196) 80%, rgb(147, 149, 154) 93%, #282c34)',
-                border: '1px solid black',
+                borderRight: `2px solid ${ Color.Nippon.Kuroturubami }80`,
+                borderBottom: `2px solid ${ Color.Nippon.Kuroturubami }80`,
                 position: 'absolute',
                 left: 0,
                 top: 0,
@@ -56,40 +55,24 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
             }}>
                 <div ref="drag:trigger"
                 style={{
-                    paddingTop: '8px',
-                    borderBottom: '1px solid black',
-                    background: 'linear-gradient(to bottom, rgb(120, 122, 126), #eeeeee 2%, rgb(182, 182, 184) 94%, rgb(108, 110, 114))',
+                    background: Color.Nippon.Aonibi,
                     width: '100%',
-                    height: '30px'
+                    fontSize: '16px',
+                    textAlign: 'left',
+                    color: Color.Nippon.Gohunn
                 }}>
-                    <header>TASK QUEUE</header>
-                </div>
-                <div key="head">
-                    <table
+                    <header
                     style={{
-                        width: '100%',
-                        padding: '0px 52px 0px 10px'
-                    }}>
-                        <tbody>
-                            <tr key={ `taskheader` }
-                            style={{
-                                width: '100%',
-                                height: '36px'
-                            }}>
-                                <td key={ `taskheader_label1`} style={{ width: '36%' }} >file path</td>
-                                <td key={ `taskheader_label2`} style={{ width: '20%' }} >state</td>
-                                <td key={ `taskheader_label3`} style={{ width: '24%' }} >size</td>
-                                <td key={ `taskheader_label4`} style={{ width: '10%' }} >print</td>
-                                <td key={ `taskheader_label5`} style={{ width: '10%' }} >cancel</td>
-                            </tr>
-                        </tbody>
-                    </table>
+                        margin: '4px 20px 6px 20px'
+                    }} >
+                        task queue
+                    </header>
                 </div>
                 <div key="list"
                 style={{
-                    minHeight: '80px',
-                    maxHeight: '200px',
-                    overflowY: 'scroll'
+                    height: '260px',
+                    overflow: 'hidden',
+                    background: Color.linearGradient([Color.Nippon.Kesizumi, Color.Nippon.Ro + 'f0'])
                 }}>
                     <table
                     style={{
