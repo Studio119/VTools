@@ -2,7 +2,7 @@
  * @Author: Antoine YANG 
  * @Date: 2019-10-02 15:53:12 
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-10-24 18:17:55
+ * @Last Modified time: 2019-10-26 16:56:56
  */
 
 import React from 'react';
@@ -10,35 +10,277 @@ import $ from 'jquery';
 import Color from '../preference/Color';
 import Dragable from '../prototypes/Dragable';
 
-
+/**
+ * Props of Component TaskQueue.
+ * @export
+ * @interface TaskQueueProps
+ */
 export interface TaskQueueProps {}
 
+/**
+ * State of Component TaskQueue.
+ * @export
+ * @interface TaskQueueState
+ */
 export interface TaskQueueState {
-    tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }>;
+    log: Array<string>;
 }
 
-export class FileInfo {
-    public readonly url: string;
-    public readonly type: 'csv' | 'json';
-    public readonly data: any;
 
-    public constructor(url: string, type: 'csv' | 'json', data: any) {
+/**
+ * Use queue to manage file getting requests.
+ * @class GetRequest
+ */
+class GetRequest {
+    /**
+     * Tells if any request is running.
+     * @private
+     * @static
+     * @type {boolean}
+     * @memberof GetRequest
+     */
+    private static occupied: boolean = false;
+
+    /**
+     * Queue struct to store unstarted requests.
+     * @private
+     * @static
+     * @type {Array<GetRequest>}
+     * @memberof GetRequest
+     */
+    private static queue: Array<GetRequest> = [];
+
+    /**
+     * URL of the file which this request linked at.
+     * @readonly
+     * @type {string}
+     * @memberof GetRequest
+     */
+    public readonly url: string;
+
+    /**
+     * Callback triggered when the request successes.
+     * @readonly
+     * @private
+     * @memberof GetRequest
+     */
+    private readonly success: (data: any) => void | undefined | null;
+
+    /**
+     * Sends information to print.
+     * @readonly
+     * @private
+     * @memberof GetRequest
+     */
+    private readonly send: (log: string) => void | undefined | null;
+    
+    /**
+     * Tells whether the request is healthy or time-out.
+     * @private
+     * @memberof GetRequest
+     */
+    private active: boolean;
+
+    /**
+     * Sets a timeout handler to avoid hanging on too long.
+     * @private
+     * @memberof GetRequest
+     */
+    private timer: NodeJS.Timeout;
+
+    /**
+     * Creates an instance of GetRequest.
+     * @param {string} url URL of the file which this request linked at.
+     * @param {((data: any) => (void | undefined | null))} success Callback triggered when the request successes.
+     * @param {((log: string) => (void | undefined | null))} send Sends information to print.
+     * @memberof GetRequest
+     */
+    public constructor(url: string, success: (data: any) => (void | undefined | null), send: (log: string) => (void | undefined | null)) {
         this.url = url;
-        this.type = type;
-        this.data = data;
+        this.success = success;
+        this.send = send;
+        this.active = true;
+        this.timer = setTimeout(() => {}, 0);
+        if (!GetRequest.occupied) {
+            this.run();
+        }
+        else {
+            GetRequest.queue.push(this);
+        }
+    }
+
+    /**
+     * Activates the file request.
+     * @memberof GetRequest
+     */
+    public run(): void {
+        GetRequest.occupied = true;
+        this.send(`Start loading file @url${ this.url }:!...`);
+        if (this.url.endsWith('.json')) {
+            this.timer = setTimeout(() => {
+                this.active = false;
+                this.send(`@errRunTimeError:! Url: ${ this.url }`);
+                this.send("@r:!");
+                this.success(undefined);
+                GetRequest.occupied = false;
+                GetRequest.next();
+            }, 2000);
+            $.getJSON(this.url, (data: any) => {
+                if (!this.active) {
+                    return;
+                }
+                clearTimeout(this.timer);
+                this.send(`File @url${ this.url }:! loaded successfully.`);
+                this.send("@r:!");
+                this.success(data);
+                GetRequest.occupied = false;
+                GetRequest.next();
+            });
+        }
+        else if (this.url.endsWith('.csv')) {
+            this.timer = setTimeout(() => {
+                this.active = false;
+                this.send(`@errRunTimeError:! Url: ${ this.url }`);
+                this.send("@r:!");
+                this.success(undefined);
+                GetRequest.occupied = false;
+                GetRequest.next();
+            }, 2000);
+            $.get(this.url, (data: any) => {
+                if (!this.active) {
+                    return;
+                }
+                clearTimeout(this.timer);
+                let dataset: Array<{[key: string]: string}> = [];
+                let labelset: Array<string> = [];
+                try {
+                    let arrs: Array<string> = data.split('\r\n');
+                    arrs.forEach((arr: string, index: number) => {
+                        let info: Array<string> = arr.split(',');
+                        if (index === 0) {
+                            labelset = info;
+                            return;
+                        }
+                        let d: {[key: string]: string} = {};
+                        if (info.length !== labelset.length) {
+                            return;
+                        }
+                        info.forEach((value: string, index: number) => {
+                            d[labelset[index]] = value;
+                        });
+                        dataset.push(d);
+                    });
+                    this.send(`File @url${ this.url }:! loaded successfully.`);
+                    this.send("@r:!");
+                    this.success(dataset);
+                    GetRequest.occupied = false;
+                    GetRequest.next();
+                } catch (error) {
+                    this.active = false;
+                    this.send('@errTypeError:!: Failed to parse @url' + this.url + ':!.');
+                    this.send("@r:!");
+                    this.success(undefined);
+                    GetRequest.occupied = false;
+                    GetRequest.next();
+                    return;
+                }
+            });
+        }
+        else {
+            this.timer = setTimeout(() => {
+                this.active = false;
+                this.send('@errRunTimeError:!');
+                this.success(undefined);
+                GetRequest.occupied = false;
+                GetRequest.next();
+            }, 2000);
+            $.get(this.url, (data: any) => {
+                if (!this.active) {
+                    return;
+                }
+                clearTimeout(this.timer);
+                this.send(`File @url${ this.url }:! loaded successfully.`);
+                this.success(data);
+                GetRequest.occupied = false;
+                GetRequest.next();
+            });
+        }
+    }
+
+    /**
+     * Starts next request in the queue.
+     * @private
+     * @static
+     * @memberof GetRequest
+     */
+    private static next(): void {
+        if (GetRequest.queue.length > 0) {
+            let q: Array<GetRequest> = [];
+            GetRequest.queue.forEach((req: GetRequest, index: number) => {
+                if (index === 0) {
+                    req.run();
+                }
+                else {
+                    q.push(req);
+                }
+            });
+            GetRequest.queue = q;
+        }
     }
 }
 
-class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
-    private didRead: Array<FileInfo>;
-    private debounce: boolean = false;
 
+export const Window: any = window;
+
+
+/**
+ * Provides a visible component as an abstract level beyond file reading requests.
+ * Switch it on or off by typing key Q.
+ * @class TaskQueue
+ * @extends {Dragable<TaskQueueProps, TaskQueueState, {}>} This component is draggable.
+ */
+class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
+    /**
+     * Avoids calling the switching too often.
+     * @private
+     * @type {boolean}
+     * @memberof TaskQueue
+     */
+    private debounce: boolean;
+
+    /**
+     * Checks if there's already an instance of TaskQueue object.
+     * @private
+     * @static
+     * @type {boolean}
+     * @memberof TaskQueue
+     */
+    private static instance: boolean = false;
+
+    /**
+     * The dictionary struct to manage the files.
+     * @private
+     * @static
+     * @type {{ [key: string]: any; }}
+     * @memberof TaskQueue
+     */
+    private static files: { [key: string]: any; } = {};
+
+    /**
+     * Creates an instance of TaskQueue.
+     * @param {TaskQueueProps} props
+     * @memberof TaskQueue
+     */
     public constructor(props: TaskQueueProps) {
         super(props);
         this.state = {
-            tasks: []
+            log: []
         };
-        this.didRead = [];
+        this.debounce = false;
+        if (TaskQueue.instance) {
+            console.error("TaskQueue is constructed more than once, which is not suggested.");
+        }
+        TaskQueue.instance = true;
     }
 
     public render(): JSX.Element {
@@ -63,7 +305,8 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                 }}>
                     <header
                     style={{
-                        margin: '4px 20px 6px 20px'
+                        padding: '8px 36px',
+                        fontFamily: 'monospace'
                     }} >
                         task queue
                     </header>
@@ -72,76 +315,87 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                 style={{
                     height: '260px',
                     overflow: 'hidden',
-                    background: Color.linearGradient([Color.Nippon.Kesizumi, Color.Nippon.Ro + 'f0'])
-                }}>
-                    <table
+                    background: Color.linearGradient([
+                        Color.Nippon.Aisumitya + 'f6',
+                        Color.Nippon.Sumi + 'f6',
+                        Color.Nippon.Ro + 'f6'
+                    ]),
+                    fontFamily: 'monospace',
+                    color: Color.Nippon.Gohunn,
+                    fontSize: '14px',
+                    lineHeight: '20px',
+                    letterSpacing: '1.16px',
+                    textAlign: 'left',
+                    paddingTop: '6px',
+                    WebkitUserSelect: 'none',
+                    MozUserSelect: 'none',
+                    userSelect: 'none'
+                }}
+                onDragStart={
+                    () => false
+                } >
+                    <div ref="paper"
                     style={{
-                        width: '100%',
-                        padding: '0px 30px 0px 10px'
-                    }}>
-                        <tbody>
-                            {
-                                this.state.tasks.length === 0
-                                    ?
-                                <tr key={ `task_null` }
-                                style={{
-                                    width: '100%'
-                                }}>
-                                    <td key={ `task_null_text1`} style={{ width: '36%' }} >Nothing in the queue</td>
-                                    <td key={ `task_null_text2`} style={{ width: '20%' }} >...</td>
-                                    <td key={ `task_null_text3`} style={{ width: '24%' }} >...</td>
-                                    <td key={ `task_null_button1`} style={{ width: '10%' }} />
-                                    <td key={ `task_null_button2`} style={{ width: '10%' }} />
-                                </tr>
-                                    :
-                                this.state.tasks.map((task: { url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }, index: number) => {
-                                    return (
-                                        <tr key={ `task${ index }` }
-                                        style={{
-                                            width: '100%',
-                                            paddingBottom: '4px'
-                                        }}>
-                                            <td key={ `task${ index }_text1`} style={{ width: '36%' }} >{ task.url }</td>
-                                            <td key={ `task${ index }_text2`}
+                        minHeight: '20px',
+                        position: 'relative',
+                        top: '0px',
+                        wordBreak: 'break-all'
+                    }} >
+                        {
+                            this.state.log.map((d: string, index: number) => {
+                                return (
+                                    d === "@r:!"
+                                        ? index < this.state.log.length - 1
+                                            ?   <br key={ index } ref={ `log_${ index }` }
+                                                style={{
+                                                    margin: '0px',
+                                                    padding: '0% 2%',
+                                                    fontSize: '14px',
+                                                    lineHeight: '20px'
+                                                }} />
+                                            :   <></>
+                                        :   <p key={ index } ref={ `log_${ index }` }
                                             style={{
-                                                width: '20%',
-                                                color: task.state === 'failed' ? 'rgb(215,0,34)' : task.state === 'successed' ? 'rgb(78,187,124)' : task.state === 'reading' ? 'rgb(195,96,45)' : 'rgb(86,156,178)'
+                                                margin: '0px',
+                                                padding: '0% 2%',
+                                                fontSize: '14px',
+                                                lineHeight: '20px',
+                                                letterSpacing: '1.16px',
+                                                fontFamily: 'monospace'
                                             }} >
-                                                { task.state }
-                                            </td>
-                                            <td key={ `task${ index }_text3`} style={{ width: '24%' }} >{ TaskQueue.format(task.size) }</td>
-                                            <td key={ `task${ index }_button1`} style={{ width: '10%' }} >
-                                                <button onClick={() => {
-                                                    for (let i: number = this.didRead.length - 1; i >= 0; i--) {
-                                                        if (this.didRead[i].url === task.url) {
-                                                            console.log({ ...this.didRead[i], size: task.size });
-                                                            break;
-                                                        }
-                                                    }
-                                                } } >print</button>
-                                            </td>
-                                            <td key={ `task${ index }_button2`} style={{ width: '10%' }} >
-                                                <button onClick={() => this.cancel(index) } >cancel</button>
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            }   
-                        </tbody>
-                    </table>
+                                                { d }
+                                            </p>
+                                );
+                            })
+                        }
+                    </div>
                 </div>
             </div>
         );
     }
 
+    /**
+     * Adds text preference.
+     * @memberof TaskQueue
+     */
+    public componentDidUpdate(): void {
+        this.state.log.forEach((text: string, index: number) => {
+            let rich: string
+            = text.replace("@url", `<span style="color: ${ Color.Nippon.Ukonn }; text-decoration: underline;">`)
+                .replace("@err", `<span style="color: ${ Color.Nippon.Syozyohi };">`)
+                .replace(":!", "</span>");
+            $(this.refs[`log_${ index }`]).html(rich);
+        });
+    }
+
     public dragableComponentDidMount(): void {
-        $(this.refs["drag:target"]).hide();
-        $('*').keydown((event: JQuery.KeyDownEvent<HTMLElement, null, HTMLElement, HTMLElement>) => {
+        // $(this.refs["drag:target"]).hide();
+        $('html').keydown((event: JQuery.KeyDownEvent<HTMLElement, null, HTMLElement, HTMLElement>) => {
             if (this.debounce) {
                 return;
             }
             this.debounce = true;
-            if (event.which === 81) {
+            if (event.which === 81) /* Q */ {
                 if ($(this.refs["drag:target"]).css("display") === "none") {
                     $(this.refs["drag:target"]).show();
                 }
@@ -152,327 +406,73 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
         })
         .keyup(() => {
             this.debounce = false;
+        })
+        .keydown((event: JQuery.KeyDownEvent<HTMLElement, null, HTMLElement, HTMLElement>) => {
+            if ($(this.refs["drag:target"]).css("display") === "none") {
+                return;
+            }
+            if (event.which === 38) /* up */ {
+                let cur: number = parseInt($(this.refs["paper"]).css("top")!) + 3;
+                cur = cur > 0 ? 0 : cur;
+                $(this.refs["paper"]).css("top", cur + "px");
+            }
+            else if (event.which === 40) /* down */ {
+                let cur: number = parseInt($(this.refs["paper"]).css("top")!) - 3;
+                cur = cur < -1 * (($(this.refs["paper"])).outerHeight()! - 15)
+                    ? -1 * (($(this.refs["paper"])).outerHeight()! - 15)
+                    : cur;
+                $(this.refs["paper"]).css("top", cur + "px");
+            }
         });
-        setInterval(() => {
-            this.setState({});
-        }, 1000);
+        Window.open = this.open.bind(this);
     }
 
-    private static format(num: number): string {
-        let part: string = num.toString();
-        let temp: string = "";
-        while (part.length > 3) {
-            temp = part.substr(part.length - 3, part.length) + "," + temp;
-            part = part.substr(0, part.length - 3);
+    /**
+     * Adds a log as a new line.
+     * @private
+     * @param {string} text Content of the log.
+     * @memberof TaskQueue
+     */
+    private print(text: string): void {
+        let log: Array<string> = this.state.log;
+        log.push(text);
+        this.setState({
+            log: log
+        });
+        if (($(this.refs["paper"])).outerHeight()! > 260) {
+            let cur: number = -1 * (($(this.refs["paper"])).outerHeight()! - 260);
+            $(this.refs["paper"]).css("top", cur + "px");
         }
-        temp = part + "," + temp;
-        return temp.substr(0, temp.length - 1) + " B";
     }
 
-    private cancel(index: number): void {
-        let url: string = "";
-        let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = [];
-        this.state.tasks.forEach((task: { url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }, i: number) => {
-            if (i !== index) {
-                tasks.push(task);
-            }
-            else {
-                url = task.url;
-            }
-        });
-        this.setState({tasks});
-        if (url.length === 0) {
+    /**
+     * Opens a file.
+     * This object will bind an "open" attribute which is a reference of this function on object window.
+     * @param {string} url The path of the file.
+     * @param {((jsondata: any) => void | undefined | null)} [success] Callback called when the request success.
+     * @returns {void}
+     * @memberof TaskQueue
+     */
+    public open(url: string, success?: (jsondata: any) => void | undefined | null): void {
+        if (TaskQueue.files[url] === "REQUEST_NOW_WAITING_IN_THE_QUEUE") {
             return;
         }
-        let queue: Array<FileInfo> = [];
-        this.didRead.forEach((file: FileInfo) => {
-            if (file.url !== url) {
-                queue.push(file);
-            }
-        });
-        this.didRead = queue;
-    }
-
-    public openCSV(url: string, success?: (jsondata: any) => void | undefined | null,
-            labels: 'loadFromHead' | Array<string> = 'loadFromHead'): void {
-        for (let i: number = this.didRead.length - 1; i >= 0; i--) {
-            if (this.didRead[i].url === url) {
-                if (success) {
-                    success(this.didRead[i].data);
-                }
-                return;
-            }
+        else if (TaskQueue.files[url] !== undefined) {
+            this.print(`Data from file @url${ url }:! already loaded.`);
+            return;
         }
-        let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-        tasks.push({ url: url, state: 'reading', size: 0 });
-        this.setState({
-            tasks: tasks
-        });
-        $.get(url, (file: string) => {
-            if (file.startsWith("<!DOCTYPE html>")) {
-                let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-                for (let i: number = tasks.length - 1; i >= 0; i--) {
-                    if (tasks[i].url === url) {
-                        tasks[i].state = 'failed';
-                        break;
-                    }
+        else {
+            TaskQueue.files[url] = "REQUEST_NOW_WAITING_IN_THE_QUEUE";
+            new GetRequest(url, (data: any) => {
+                TaskQueue.files[url] = data;
+                if (success && data) {
+                    success(data);
                 }
-                this.setState({
-                    tasks: tasks
-                });
-                console.error(`Can't find file "${ url }"`);
-                return;
-            }
-            let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-            for (let i: number = tasks.length - 1; i >= 0; i--) {
-                if (tasks[i].url === url) {
-                    tasks[i].state = 'parsing';
-                    tasks[i].size = file.length;
-                    break;
-                }
-            }
-            this.setState({
-                tasks: tasks
+            }, (log: string) => {
+                this.print(log);
             });
-            if (url.endsWith('csv')) {
-                let dataset: Array<object> = [];
-                let labelset: Array<string> = [];
-                try {
-                    let arrs: Array<string> = file.split('\r\n');
-                    arrs.forEach((arr: string, index: number) => {
-                        let info: Array<string> = arr.split(',');
-                        if (index === 0) {
-                            if (labels === 'loadFromHead') {
-                                labelset = info;
-                            }
-                            else {
-                                labelset = labels;
-                            }
-                            return;
-                        }
-                        let d: any = {};
-                        if (info.length !== labelset.length) {
-                            return;
-                        }
-                        info.forEach((value: string, index: number) => {
-                            d[labelset[index]] = value;
-                        });
-                        dataset.push(d);
-                    });
-                } catch (error) {
-                    let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-                    for (let i: number = tasks.length - 1; i >= 0; i--) {
-                        if (tasks[i].url === url) {
-                            tasks[i].state = 'failed';
-                            break;
-                        }
-                    }
-                    this.setState({
-                        tasks: tasks
-                    });
-                    console.error(`Can't parse data from file '${ url }' into json`);
-                    return;
-                }
-                this.didRead.push(new FileInfo(url, 'csv', dataset));
-                let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-                for (let i: number = tasks.length - 1; i >= 0; i--) {
-                    if (tasks[i].url === url) {
-                        tasks[i].state = 'successed';
-                        break;
-                    }
-                }
-                this.setState({
-                    tasks: tasks
-                });
-                if (success) {
-                    success(dataset);
-                }
-            }
-            else {
-                console.warn(`Loaded file '${ url }' is not valid csv file! `);
-            }
-        });
-    }
-
-    public openCSV_nostoring(url: string, success?: (jsondata: any) => void | undefined | null,
-            labels: 'loadFromHead' | Array<string> = 'loadFromHead'): void {
-        for (let i: number = this.didRead.length - 1; i >= 0; i--) {
-            if (this.didRead[i].url === url) {
-                if (success) {
-                    success(this.didRead[i].data);
-                }
-                return;
-            }
+            return;
         }
-        let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-        tasks.push({ url: url, state: 'reading', size: 0 });
-        this.setState({
-            tasks: tasks
-        });
-        $.get(url, (file: string) => {
-            if (file.startsWith("<!DOCTYPE html>")) {
-                let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-                for (let i: number = tasks.length - 1; i >= 0; i--) {
-                    if (tasks[i].url === url) {
-                        tasks[i].state = 'failed';
-                        break;
-                    }
-                }
-                this.setState({
-                    tasks: tasks
-                });
-                console.error(`Can't find file "${ url }"`);
-                return;
-            }
-            let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-            for (let i: number = tasks.length - 1; i >= 0; i--) {
-                if (tasks[i].url === url) {
-                    tasks[i].state = 'parsing';
-                    tasks[i].size = file.length;
-                    break;
-                }
-            }
-            this.setState({
-                tasks: tasks
-            });
-            if (url.endsWith('csv')) {
-                let dataset: Array<object> = [];
-                let labelset: Array<string> = [];
-                try {
-                    let arrs: Array<string> = file.split('\r\n');
-                    arrs.forEach((arr: string, index: number) => {
-                        let info: Array<string> = arr.split(',');
-                        if (index === 0) {
-                            if (labels === 'loadFromHead') {
-                                labelset = info;
-                            }
-                            else {
-                                labelset = labels;
-                            }
-                            return;
-                        }
-                        let d: any = {};
-                        info.forEach((value: string, index: number) => {
-                            d[labelset[index]] = value;
-                        });
-                        dataset.push(d);
-                    });
-                } catch (error) {
-                    let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-                    for (let i: number = tasks.length - 1; i >= 0; i--) {
-                        if (tasks[i].url === url) {
-                            tasks[i].state = 'failed';
-                            break;
-                        }
-                    }
-                    this.setState({
-                        tasks: tasks
-                    });
-                    console.error(`Can't parse data from file '${ url }' into json`);
-                    return;
-                }
-                let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-                for (let i: number = tasks.length - 1; i >= 0; i--) {
-                    if (tasks[i].url === url) {
-                        tasks[i].state = 'successed';
-                        break;
-                    }
-                }
-                this.setState({
-                    tasks: tasks
-                });
-                if (success) {
-                    success(dataset);
-                }
-            }
-            else {
-                console.warn(`Loaded file '${ url }' is not valid csv file! `);
-            }
-        });
-    }
-
-    public openJSON(url: string, success?: (jsondata: any) => void | undefined | null): void {
-        for (let i: number = this.didRead.length - 1; i >= 0; i--) {
-            if (this.didRead[i].url === url) {
-                if (success) {
-                    success(this.didRead[i].data);
-                }
-                return;
-            }
-        }
-        let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-        tasks.push({ url: url, state: 'reading', size: 0 });
-        this.setState({
-            tasks: tasks
-        });
-        $.getJSON(url, (file: any) => {
-            let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-            for (let i: number = tasks.length - 1; i >= 0; i--) {
-                if (tasks[i].url === url) {
-                    tasks[i].state = 'parsing';
-                    break;
-                }
-            }
-            this.setState({
-                tasks: tasks
-            });
-            tasks = this.state.tasks;
-            for (let i: number = tasks.length - 1; i >= 0; i--) {
-                if (tasks[i].url === url) {
-                    tasks[i].state = 'successed';
-                    break;
-                }
-            }
-            this.didRead.push(new FileInfo(url, 'json', file));
-            this.setState({
-                tasks: tasks
-            });
-            if (success) {
-                success(file);
-            }
-        });
-    }
-
-    public openJSON_nostoring(url: string, success?: (jsondata: any) => void | undefined | null): void {
-        for (let i: number = this.didRead.length - 1; i >= 0; i--) {
-            if (this.didRead[i].url === url) {
-                if (success) {
-                    success(this.didRead[i].data);
-                }
-                return;
-            }
-        }
-        let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-        tasks.push({ url: url, state: 'reading', size: 0 });
-        this.setState({
-            tasks: tasks
-        });
-        $.getJSON(url, (file: any) => {
-            let tasks: Array<{ url: string, state: 'reading' | 'parsing' | 'successed' | 'failed', size: number }> = this.state.tasks;
-            for (let i: number = tasks.length - 1; i >= 0; i--) {
-                if (tasks[i].url === url) {
-                    tasks[i].state = 'parsing';
-                    tasks[i].size = file.toString().length;
-                    break;
-                }
-            }
-            this.setState({
-                tasks: tasks
-            });
-            tasks = this.state.tasks;
-            for (let i: number = tasks.length - 1; i >= 0; i--) {
-                if (tasks[i].url === url) {
-                    tasks[i].state = 'successed';
-                    break;
-                }
-            }
-            this.setState({
-                tasks: tasks
-            });
-            if (success) {
-                success(file);
-            }
-        });
     }
 }
 

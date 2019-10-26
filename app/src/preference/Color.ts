@@ -2,7 +2,7 @@
  * @Author: Antoine YANG 
  * @Date: 2019-10-24 17:47:11 
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-10-24 20:01:57
+ * @Last Modified time: 2019-10-26 00:27:58
  */
 
 
@@ -229,6 +229,39 @@ const Color = {
          
          ```
          */
+        /**
+         ```
+         
+         ```
+         */
+        /**
+         ```
+         猩猩緋 rgb(232,48,21)
+         ```
+         */
+        Syozyohi: '#E83015',
+        /**
+         ```
+         
+         ```
+         */
+        /**
+         ```
+         金茶 rgb(199,128,45)
+         ```
+         */
+        Kinntya: '#C7802D',
+        /**
+         ```
+         
+         ```
+         */
+        /**
+         ```
+         鬱金 rgb(239,187,36)
+         ```
+         */
+        Ukonn: '#EFBB24',
         /**
          ```
          

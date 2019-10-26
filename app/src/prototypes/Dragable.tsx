@@ -10,7 +10,7 @@ import $ from 'jquery';
 
 
 /**
- * Make a component dragable on its title bar.
+ * Makes a component dragable on its title bar.
  * @nb Append 
  ```javascript
     ref="drag:trigger"
@@ -82,7 +82,7 @@ abstract class Dragable<P = {}, S = {}, SS = any> extends Component<P, S, SS> {
             console.error("The target of this dragging event is not defined.");
         }
         else {
-            $(this.refs['drag:trigger'] as any).css('position', 'absolute')
+            $(this.refs['drag:trigger'] as any)
                 .css('-webkit-user-select', 'none')
                 .css('-moz-user-select', 'none')
                 .css('-o-user-select', 'none')
@@ -93,7 +93,8 @@ abstract class Dragable<P = {}, S = {}, SS = any> extends Component<P, S, SS> {
                     Dragable.offsetX = event.clientX - parseInt($(this.refs['drag:target'] as any).css('left')!)
                     Dragable.offsetY = event.clientY - parseInt($(this.refs['drag:target'] as any).css('top')!)
                 });
-            $(this.refs['drag:target'] as any).on('mousemove', (event: JQuery.MouseMoveEvent<any, undefined, any, any>) => {
+            $(this.refs['drag:target'] as any).css('position', 'absolute')
+                .on('mousemove', (event: JQuery.MouseMoveEvent<any, undefined, any, any>) => {
                     if (!Dragable.dragging) {
                         return;
                     }
