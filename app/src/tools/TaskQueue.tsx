@@ -2,7 +2,7 @@
  * @Author: Antoine YANG 
  * @Date: 2019-10-02 15:53:12 
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-10-26 16:56:56
+ * @Last Modified time: 2019-10-27 20:12:00
  */
 
 import React from 'react';
@@ -119,18 +119,18 @@ class GetRequest {
         if (this.url.endsWith('.json')) {
             this.timer = setTimeout(() => {
                 this.active = false;
-                this.send(`@errRunTimeError:! Url: ${ this.url }`);
+                this.send(`@errRunTimeError:! URL: @url${ this.url }:;.`);
                 this.send("@r:!");
                 this.success(undefined);
                 GetRequest.occupied = false;
                 GetRequest.next();
-            }, 2000);
+            }, 1000);
             $.getJSON(this.url, (data: any) => {
                 if (!this.active) {
                     return;
                 }
                 clearTimeout(this.timer);
-                this.send(`File @url${ this.url }:! loaded successfully.`);
+                this.send(`@resSuccess:; File @url${ this.url }:! loaded successfully.`);
                 this.send("@r:!");
                 this.success(data);
                 GetRequest.occupied = false;
@@ -140,17 +140,26 @@ class GetRequest {
         else if (this.url.endsWith('.csv')) {
             this.timer = setTimeout(() => {
                 this.active = false;
-                this.send(`@errRunTimeError:! Url: ${ this.url }`);
+                this.send(`@errRunTimeError:! URL: @url${ this.url }:;.`);
                 this.send("@r:!");
                 this.success(undefined);
                 GetRequest.occupied = false;
                 GetRequest.next();
-            }, 2000);
+            }, 1000);
             $.get(this.url, (data: any) => {
                 if (!this.active) {
                     return;
                 }
                 clearTimeout(this.timer);
+                if ((data as string).startsWith("<!DOCTYPE html>")) {
+                    this.send(`@errFileNotFound:! URL: @url${ this.url }:;.`);
+                    this.send("@r:!");
+                    this.success(undefined);
+                    GetRequest.occupied = false;
+                    GetRequest.next();
+                    return;
+                }
+                this.send(`Parsing character stream from @url${ this.url }:! to JavaScript object...`);
                 let dataset: Array<{[key: string]: string}> = [];
                 let labelset: Array<string> = [];
                 try {
@@ -170,14 +179,14 @@ class GetRequest {
                         });
                         dataset.push(d);
                     });
-                    this.send(`File @url${ this.url }:! loaded successfully.`);
+                    this.send(`@resSuccess:; File @url${ this.url }:! loaded successfully.`);
                     this.send("@r:!");
                     this.success(dataset);
                     GetRequest.occupied = false;
                     GetRequest.next();
                 } catch (error) {
                     this.active = false;
-                    this.send('@errTypeError:!: Failed to parse @url' + this.url + ':!.');
+                    this.send('@errTypeError:!: Failed to parse @url' + this.url + ':;.');
                     this.send("@r:!");
                     this.success(undefined);
                     GetRequest.occupied = false;
@@ -189,16 +198,24 @@ class GetRequest {
         else {
             this.timer = setTimeout(() => {
                 this.active = false;
-                this.send('@errRunTimeError:!');
+                this.send(`@errRunTimeError:! URL: @url${ this.url }:!.`);
                 this.success(undefined);
                 GetRequest.occupied = false;
                 GetRequest.next();
-            }, 2000);
+            }, 1000);
             $.get(this.url, (data: any) => {
                 if (!this.active) {
                     return;
                 }
                 clearTimeout(this.timer);
+                if ((data as string).startsWith("<!DOCTYPE html>")) {
+                    this.send(`@errFileNotFound:! URL: @url${ this.url }:;.`);
+                    this.send("@r:!");
+                    this.success(undefined);
+                    GetRequest.occupied = false;
+                    GetRequest.next();
+                    return;
+                }
                 this.send(`File @url${ this.url }:! loaded successfully.`);
                 this.success(data);
                 GetRequest.occupied = false;
@@ -257,6 +274,24 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
      */
     private static instance: boolean = false;
 
+
+    /**
+     * Checks whether the scroll is activated.
+     * @private
+     * @type {boolean}
+     * @memberof TaskQueue
+     */
+    private scrolling: boolean = false;
+
+
+    /**
+     * Current offset of the scroll.
+     * @private
+     * @type {number}
+     * @memberof TaskQueue
+     */
+    private offsetY: number = 0;
+
     /**
      * The dictionary struct to manage the files.
      * @private
@@ -295,7 +330,7 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                 top: 0,
                 zIndex: 10000
             }}>
-                <div ref="drag:trigger"
+                <div ref="drag:trigger" key="head"
                 style={{
                     background: Color.Nippon.Aonibi,
                     width: '100%',
@@ -334,12 +369,15 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                 onDragStart={
                     () => false
                 } >
-                    <div ref="paper"
+                    <div ref="paper" key="left"
                     style={{
                         minHeight: '20px',
                         position: 'relative',
                         top: '0px',
-                        wordBreak: 'break-all'
+                        wordBreak: 'break-all',
+                        display: 'inline-block',
+                        width: '580px',
+                        marginRight: '-20px'
                     }} >
                         {
                             this.state.log.map((d: string, index: number) => {
@@ -353,7 +391,7 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                                                     fontSize: '14px',
                                                     lineHeight: '20px'
                                                 }} />
-                                            :   <></>
+                                            :   []
                                         :   <p key={ index } ref={ `log_${ index }` }
                                             style={{
                                                 margin: '0px',
@@ -368,6 +406,75 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                                 );
                             })
                         }
+                        <input key="input" ref="input"
+                        style={{
+                            margin: '0% 2%',
+                            fontSize: '14px',
+                            lineHeight: '20px',
+                            letterSpacing: '1.16px',
+                            fontFamily: 'monospace',
+                            display: 'none',
+                            width: '556px',
+                            border: 'none',
+                            // resize: 'none',
+                            color: Color.Nippon.Gohunn,
+                            background: Color.Nippon.Kesizumi + '40'
+                        }} />
+                    </div>
+                    <div ref="bar" key="right"
+                    style={{
+                        float: 'right',
+                        height: '256px',
+                        padding: '0px 10px'
+                    }}
+                    onMouseEnter={
+                        () => {
+                            $(this.refs["handler"])
+                                .animate({
+                                    opacity: 0.4
+                                }, 100);
+                        }
+                    }
+                    onMouseLeave={
+                        () => {
+                            $(this.refs["handler"])
+                                .animate({
+                                    opacity: 0.1
+                                }, 100);
+                        }
+                    }
+                    onMouseUp={
+                        () => {
+                            this.scrolling = false;
+                        }
+                    }
+                    onMouseMove={
+                        (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+                            if (!this.scrolling) {
+                                return;
+                            }
+                            let offset: number = event.clientY - this.offsetY;
+                            offset = offset < 0 ? 0 : offset + parseFloat($(this.refs['handler']).css('height')!) > 255
+                                ? 255 - parseFloat($(this.refs['handler']).css('height')!) : offset;
+                            $(this.refs['handler']).css('top', offset + 'px');
+                            $(this.refs["paper"]).css("top", -1 * offset / 255 * ($(this.refs["paper"]).outerHeight()! + 240) + "px");
+                        }
+                    } >
+                        <div ref="handler"
+                        style={{
+                            width: 17,
+                            height: 256,
+                            background: Color.Nippon.Gohunn,
+                            opacity: 0.1,
+                            position: 'relative',
+                            top: 0
+                        }}
+                        onMouseDown={
+                            (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
+                                this.scrolling = true;
+                                this.offsetY = event.clientY - parseInt($(this.refs['handler'] as any).css('top')!)
+                            }
+                        } />
                     </div>
                 </div>
             </div>
@@ -375,7 +482,7 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
     }
 
     /**
-     * Adds text preference.
+     * Adds text preference, and changes the height of the scroll.
      * @memberof TaskQueue
      */
     public componentDidUpdate(): void {
@@ -383,24 +490,52 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
             let rich: string
             = text.replace("@url", `<span style="color: ${ Color.Nippon.Ukonn }; text-decoration: underline;">`)
                 .replace("@err", `<span style="color: ${ Color.Nippon.Syozyohi };">`)
-                .replace(":!", "</span>");
+                .replace("@res", `<span style="color: ${ Color.Nippon.Nae };">`)
+                .replace(":!", "</span>")
+                .replace(":;", "</span>");
             $(this.refs[`log_${ index }`]).html(rich);
         });
+        let length: number = 260 / ($(this.refs["paper"]).outerHeight()! + 260) * 256;
+        $(this.refs["handler"])
+            .css("height", length)
+            .css("top", (-255 * parseFloat($(this.refs["paper"]).css("top"))) / ($(this.refs["paper"]).outerHeight()! + 240));
     }
 
     public dragableComponentDidMount(): void {
         // $(this.refs["drag:target"]).hide();
         $('html').keydown((event: JQuery.KeyDownEvent<HTMLElement, null, HTMLElement, HTMLElement>) => {
-            if (this.debounce) {
+            if (this.debounce || $(this.refs["input"]).css("display") !== "none") {
                 return;
             }
             this.debounce = true;
             if (event.which === 81) /* Q */ {
+                $(this.refs["input"]).hide().val("");
                 if ($(this.refs["drag:target"]).css("display") === "none") {
-                    $(this.refs["drag:target"]).show();
+                    $(this.refs["drag:target"])
+                        .css('opacity', 0)
+                        .show()
+                        .animate({
+                            opacity: 1,
+                            width: 601.6,
+                            height: 300.4,
+                            top: $(this.refs["drag:target"]).attr('_y'),
+                            left: $(this.refs["drag:target"]).attr('_x')
+                        }, 200);
                 }
                 else {
-                    $(this.refs["drag:target"]).hide();
+                    $(this.refs["drag:target"])
+                        .css('opacity', 1)
+                        .attr('_x', $(this.refs["drag:target"]).css('left'))
+                        .attr('_y', $(this.refs["drag:target"]).css('top'))
+                        .animate({
+                            opacity: 0,
+                            top: 0,
+                            left: 0,
+                            width: 0,
+                            height: 0
+                        }, 200, () => {
+                            $(this.refs["drag:target"]).hide();
+                        });
                 }
             }
         })
@@ -411,17 +546,45 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
             if ($(this.refs["drag:target"]).css("display") === "none") {
                 return;
             }
-            if (event.which === 38) /* up */ {
+            if (event.which === 38 && $(this.refs["input"]).css("display") === "none") /* up */ {
                 let cur: number = parseInt($(this.refs["paper"]).css("top")!) + 3;
-                cur = cur > 0 ? 0 : cur;
+                cur = cur > -2 ? -2 : cur;
                 $(this.refs["paper"]).css("top", cur + "px");
+                $(this.refs["handler"])
+                    .css("top", 255 * (-1 * cur) / ($(this.refs["paper"]).outerHeight()! + 240));
             }
-            else if (event.which === 40) /* down */ {
+            else if (event.which === 40 && $(this.refs["input"]).css("display") === "none") /* down */ {
                 let cur: number = parseInt($(this.refs["paper"]).css("top")!) - 3;
                 cur = cur < -1 * (($(this.refs["paper"])).outerHeight()! - 15)
                     ? -1 * (($(this.refs["paper"])).outerHeight()! - 15)
                     : cur;
                 $(this.refs["paper"]).css("top", cur + "px");
+                $(this.refs["handler"])
+                    .css("top", 255 * (-1 * cur) / ($(this.refs["paper"]).outerHeight()! + 240));
+            }
+            else if (event.which === 13) /* enter */ {
+                if ($(this.refs["input"]).css("display") === "none") {
+                    $(this.refs["input"]).show().focus();
+                }
+                else {
+                    let request: string = ($(this.refs["input"]).val() as any).toString();
+                    if (request.length > 0) {
+                        this.print(request);
+                        try {
+                            let menu: any = { ...Window, ...this, ...TaskQueue };
+                            if (menu[request] !== undefined) {
+                                console.log(menu[request]);
+                                this.print((menu[request] as any).toString() as string);
+                            }
+                            else {
+                                this.print("undefined");
+                            }
+                        } catch (error) {
+                            this.print("@errKeyError:;");
+                        }
+                    }
+                    $(this.refs["input"]).hide().val("");
+                }
             }
         });
         Window.open = this.open.bind(this);
@@ -434,6 +597,9 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
      * @memberof TaskQueue
      */
     private print(text: string): void {
+        if (text.length === 0) {
+            return;
+        }
         let log: Array<string> = this.state.log;
         log.push(text);
         this.setState({
@@ -441,7 +607,9 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
         });
         if (($(this.refs["paper"])).outerHeight()! > 260) {
             let cur: number = -1 * (($(this.refs["paper"])).outerHeight()! - 260);
-            $(this.refs["paper"]).css("top", cur + "px");
+            if (parseFloat($(this.refs["paper"]).css("top")!) > cur) {
+                $(this.refs["paper"]).css("top", cur + "px");
+            }
         }
     }
 
@@ -458,7 +626,7 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
             return;
         }
         else if (TaskQueue.files[url] !== undefined) {
-            this.print(`Data from file @url${ url }:! already loaded.`);
+            this.print(`@resSuccess:; Data from file @url${ url }:! already loaded.`);
             return;
         }
         else {
