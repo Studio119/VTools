@@ -2,7 +2,7 @@
  * @Author: Antoine YANG 
  * @Date: 2019-10-02 15:53:12 
  * @Last Modified by: Antoine YANG
- * @Last Modified time: 2019-10-27 20:12:00
+ * @Last Modified time: 2019-10-27 21:10:54
  */
 
 import React from 'react';
@@ -416,7 +416,6 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                             display: 'none',
                             width: '556px',
                             border: 'none',
-                            // resize: 'none',
                             color: Color.Nippon.Gohunn,
                             background: Color.Nippon.Kesizumi + '40'
                         }} />
@@ -567,17 +566,37 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
                     $(this.refs["input"]).show().focus();
                 }
                 else {
-                    let request: string = ($(this.refs["input"]).val() as any).toString();
-                    if (request.length > 0) {
-                        this.print(request);
+                    if ((($(this.refs["input"]).val() as any).toString() as string).length > 0) {
                         try {
-                            let menu: any = { ...Window, ...this, ...TaskQueue };
-                            if (menu[request] !== undefined) {
-                                console.log(menu[request]);
-                                this.print((menu[request] as any).toString() as string);
-                            }
-                            else {
-                                this.print("undefined");
+                            let params: Array<string> = (($(this.refs["input"]).val() as any).toString() as string).split(' ');
+                            let request: string = params[0];
+                            if (params.length > 0) {
+                                this.print(params.join(" "));
+                                let menu: any = { ...Window, ...this, ...TaskQueue };
+                                if (params.length > 1 && params[0] === "open") {
+                                    if (params.length > 2 && menu[params[2]] !== undefined) {
+                                        this.open(params[1], menu[params[2]] as ((jsondata: any) => void | null | undefined));
+                                    }
+                                    else {
+                                        this.open(params[1], (data: any) => {
+                                            console.log(data);
+                                        });
+                                    }
+                                }
+                                else {
+                                    if (menu[request] !== undefined) {
+                                        if (params.length > 1) {
+                                            Window[params[1]] = menu[request];
+                                        }
+                                        else {
+                                            console.log(menu[request]);
+                                        }
+                                        this.print((menu[request] as any).toString() as string);
+                                    }
+                                    else {
+                                        this.print("undefined");
+                                    }
+                                }
                             }
                         } catch (error) {
                             this.print("@errKeyError:;");
@@ -588,6 +607,7 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
             }
         });
         Window.open = this.open.bind(this);
+        Window.out = this.print.bind(this);
     }
 
     /**
@@ -627,6 +647,9 @@ class TaskQueue extends Dragable<TaskQueueProps, TaskQueueState, {}> {
         }
         else if (TaskQueue.files[url] !== undefined) {
             this.print(`@resSuccess:; Data from file @url${ url }:! already loaded.`);
+            if (success && TaskQueue.files[url]) {
+                success(TaskQueue.files[url]);
+            }
             return;
         }
         else {
